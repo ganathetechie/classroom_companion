@@ -3,6 +3,7 @@ import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 DB_PATH = Path(__file__).resolve().parent / "classroom_companion.db"
 
@@ -255,6 +256,81 @@ def find_student_for_teacher(
     return row["classroom_id"], row["student_id"]
 
 
+def get_teacher_student_activity(teacher_id: int, student_id: int) -> dict[str, Any]:
+    with get_connection() as conn:
+        assignments = conn.execute(
+            """
+            SELECT a.id, c.join_code, a.assignment_text,
+                   a.due_date, a.status
+            FROM assignments a
+            JOIN classrooms c ON c.id = a.classroom_id
+            WHERE a.teacher_id = ? AND a.student_id = ?
+            ORDER BY a.id DESC
+            """,
+            (teacher_id, student_id),
+        ).fetchall()
+
+        assignment_ids = [row["id"] for row in assignments]
+        progress_by_assignment: dict[int, list[dict[str, str]]] = {
+            row["id"]: [] for row in assignments
+        }
+        submission_by_assignment: dict[int, list[dict[str, str]]] = {
+            row["id"]: [] for row in assignments
+        }
+
+        if assignment_ids:
+            placeholders = ",".join("?" for _ in assignment_ids)
+            progress_rows = conn.execute(
+                f"""
+                SELECT assignment_id, progress_text, created_at
+                FROM assignment_progress
+                WHERE assignment_id IN ({placeholders})
+                ORDER BY created_at ASC
+                """,
+                assignment_ids,
+            ).fetchall()
+            for row in progress_rows:
+                progress_by_assignment[row["assignment_id"]].append(
+                    {
+                        "progress_text": row["progress_text"],
+                        "created_at": row["created_at"],
+                    }
+                )
+
+            submission_rows = conn.execute(
+                f"""
+                SELECT assignment_id, submission_text, submitted_at
+                FROM submissions
+                WHERE assignment_id IN ({placeholders})
+                ORDER BY submitted_at DESC
+                """,
+                assignment_ids,
+            ).fetchall()
+            for row in submission_rows:
+                submission_by_assignment[row["assignment_id"]].append(
+                    {
+                        "submission_text": row["submission_text"],
+                        "submitted_at": row["submitted_at"],
+                    }
+                )
+
+    return {
+        "student_id": student_id,
+        "assignments": [
+            {
+                "assignment_id": row["id"],
+                "join_code": row["join_code"],
+                "assignment_text": row["assignment_text"],
+                "due_date": row["due_date"],
+                "status": row["status"],
+                "progress_updates": progress_by_assignment[row["id"]],
+                "submissions": submission_by_assignment[row["id"]],
+            }
+            for row in assignments
+        ],
+    }
+
+
 def normalize_due_date(date_str: str) -> str:
     value = date_str.strip()
     for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
@@ -429,3 +505,17 @@ def save_feedback(
             (assignment_id, teacher_id, student_id, feedback_text),
         )
         return cursor.lastrowid
+
+
+def get_latest_progress_for_assignment(assignment_id: int) -> sqlite3.Row | None:
+    with get_connection() as conn:
+        return conn.execute(
+            """
+            SELECT progress_text, created_at
+            FROM assignment_progress
+            WHERE assignment_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (assignment_id,),
+        ).fetchone()

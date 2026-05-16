@@ -1,5 +1,6 @@
 import atexit
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -15,16 +16,19 @@ from db import (
     get_submission_for_teacher,
     get_teacher_assignments,
     get_teacher_students,
+    get_teacher_student_activity,
     get_user_role,
     init_db,
     join_classroom,
     parse_assignment_message,
+    get_latest_progress_for_assignment,
     save_assignment_progress,
     save_feedback,
     save_submission,
     save_user,
     teacher_has_classroom,
 )
+from llm_service import create_llm_service, LLMServiceError
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
 from telegram.ext import (
@@ -79,18 +83,33 @@ def ensure_single_instance() -> None:
 
 
 async def send_assignment_reminders(application: Application) -> None:
+    llm_service = application.bot_data.get("llm_service")
     for row in get_incomplete_assignments():
         try:
-            await application.bot.send_message(
-                chat_id=row["student_id"],
-                text=(
+            reminder_text = None
+            if llm_service is not None:
+                try:
+                    reminder_text = llm_service.generate_reminder(
+                        assignment_text=row["assignment_text"],
+                        due_date=row["due_date"],
+                        status=row["status"],
+                    )
+                except Exception:
+                    reminder_text = None
+
+            if not reminder_text:
+                reminder_text = (
                     "Assignment reminder\n\n"
                     f"Assignment #{row['id']}:\n"
                     f"{row['assignment_text']}\n\n"
                     f"Due: {row['due_date']}\n"
                     f"Status: {row['status']}\n\n"
                     "Use /progress or /submit to update your work."
-                ),
+                )
+
+            await application.bot.send_message(
+                chat_id=row["student_id"],
+                text=reminder_text,
             )
         except TelegramError:
             continue
@@ -203,14 +222,9 @@ async def join_class(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 ASSIGN_FORMAT_HELP = (
-    "Send the assignment in this format:\n\n"
-    "<assignment text>\n\n"
-    "Student: <telegram username>\n"
-    "Due: YYYY-MM-DD\n\n"
-    "Example:\n"
-    "Read chapter 5 and answer questions 1-10\n\n"
-    "Student: jane_student\n"
-    "Due: 2026-06-01"
+    "Send assignments in natural language, for example:\n\n"
+
+    "I can extract the student, task, and due date automatically."
 )
 
 
@@ -300,11 +314,35 @@ async def assignment_status(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         text_preview = row["assignment_text"]
         if len(text_preview) > 120:
             text_preview = text_preview[:117] + "..."
+
+        # Try to enrich with latest progress classification
+        classification_snippet = ""
+        try:
+            progress_row = get_latest_progress_for_assignment(row["id"])
+            llm_service = context.application.bot_data.get("llm_service")
+            if progress_row and llm_service is not None:
+                try:
+                    cls = llm_service.classify_progress(
+                        progress_text=progress_row["progress_text"],
+                        assignment_text=row["assignment_text"],
+                    )
+                    summary = cls.summary
+                    if len(summary) > 80:
+                        summary = summary[:77] + "..."
+                    classification_snippet = f"AI: {cls.category} — {summary} ({cls.confidence})"
+                except LLMServiceError:
+                    classification_snippet = "AI: unavailable"
+                except Exception:
+                    classification_snippet = ""
+        except Exception:
+            classification_snippet = ""
+
         lines.append(
             f"\n  #{row['id']} — {student}\n"
             f"  Status: {row['status']}\n"
             f"  Due: {row['due_date']}\n"
             f"  Task: {text_preview}"
+            + (f"\n  {classification_snippet}" if classification_snippet else "")
         )
 
     message = "\n".join(lines).strip()
@@ -402,6 +440,22 @@ async def receive_progress(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         progress_text=progress_text,
     )
 
+    classification_text = ""
+    llm_service = context.application.bot_data.get("llm_service")
+    if llm_service is not None:
+        try:
+            classification = llm_service.classify_progress(
+                progress_text=progress_text,
+                assignment_text=assignment["assignment_text"],
+            )
+            classification_text = (
+                f"\n\nProgress classification: {classification.category}\n"
+                f"Summary: {classification.summary}\n"
+                f"Confidence: {classification.confidence}"
+            )
+        except Exception:
+            classification_text = "\n\nProgress classification unavailable."
+
     student_label = f"@{user.username}" if user.username else f"Student {user.id}"
     await context.bot.send_message(
         chat_id=assignment["teacher_id"],
@@ -410,6 +464,7 @@ async def receive_progress(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             f"Assignment #{assignment['id']} (due {assignment['due_date']}):\n"
             f"{assignment['assignment_text']}\n\n"
             f"Progress:\n{progress_text}"
+            f"{classification_text}"
         ),
     )
     await update.message.reply_text(
@@ -602,6 +657,100 @@ async def receive_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await receive_submission(update, context)
     elif context.user_data.get("awaiting_feedback"):
         await receive_feedback(update, context)
+    elif await handle_teacher_summary_query(update, context):
+        return
+
+
+def extract_summary_query_student(text: str) -> str | None:
+    patterns = [
+        r"(?i)^(?:how is|how's)\s+@?(?P<student>[A-Za-z0-9_]+(?:\s+[A-Za-z0-9_]+)*)\s+doing\??$",
+        r"(?i)^(?:summarize|give me an update on|what is the progress of)\s+@?(?P<student>[A-Za-z0-9_]+(?:\s+[A-Za-z0-9_]+)*)\b(?:'s progress| progress)?\??$",
+        r"(?i)^(?:status of|progress of)\s+@?(?P<student>[A-Za-z0-9_]+(?:\s+[A-Za-z0-9_]+)*)\??$",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text.strip())
+        if match:
+            return match.group("student").strip().lstrip("@")
+    return None
+
+
+def build_fallback_student_summary(student_activity: dict) -> str:
+    assignments = student_activity.get("assignments", [])
+    if not assignments:
+        return "I couldn't find any assignments or progress for that student."
+
+    active = [a for a in assignments if a["status"] in ("assigned", "in_progress")]
+    completed = [a for a in assignments if a["status"] == "completed"]
+    latest = assignments[0]
+
+    lines = [
+        f"Student progress summary for {len(assignments)} assignment(s):",
+    ]
+    if active:
+        lines.append(
+            f"{len(active)} active assignment(s) and {len(completed)} completed."
+        )
+    else:
+        lines.append(f"All {len(completed)} assignment(s) are completed.")
+
+    lines.append(f"Most recent assignment: {latest['assignment_text']}")
+    lines.append(f"Status: {latest['status']}, due {latest['due_date']}.")
+
+    if latest["progress_updates"]:
+        lines.append(
+            "Latest progress update: "
+            + latest["progress_updates"][-1]["progress_text"]
+        )
+    elif latest["submissions"]:
+        lines.append(
+            "Submission received at "
+            + latest["submissions"][0]["submitted_at"]
+            + "."
+        )
+    else:
+        lines.append("No progress updates or submissions have been recorded yet.")
+
+    return "\n".join(lines)
+
+
+async def handle_teacher_summary_query(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> bool:
+    user = update.effective_user
+    if user is None or update.message is None or not update.message.text:
+        return False
+
+    if get_user_role(user.id) != "teacher":
+        return False
+
+    student_name = extract_summary_query_student(update.message.text)
+    if not student_name:
+        return False
+
+    student_match = find_student_for_teacher(user.id, student_name)
+    if student_match is None:
+        await update.message.reply_text(
+            "I couldn't find that student in your classroom. "
+            "Please use their Telegram username or check that they have joined."
+        )
+        return True
+
+    _, student_id = student_match
+    student_activity = get_teacher_student_activity(user.id, student_id)
+
+    llm_service = context.application.bot_data.get("llm_service")
+    summary_text = None
+    if llm_service is not None:
+        try:
+            summary_text = llm_service.summarize_student(student_activity)
+        except Exception:
+            summary_text = None
+
+    if not summary_text:
+        summary_text = build_fallback_student_summary(student_activity)
+
+    await update.message.reply_text(summary_text)
+    return True
 
 
 async def receive_assignment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -619,9 +768,23 @@ async def receive_assignment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     try:
-        assignment_text, student_name, due_date = parse_assignment_message(
-            update.message.text
-        )
+        llm_service = context.application.bot_data.get("llm_service")
+        if llm_service is not None:
+            try:
+                parsed = llm_service.parse_assignment(update.message.text)
+                assignment_text = parsed.assignment_text
+                student_name = parsed.student
+                due_date = parsed.due_date
+            except LLMServiceError:
+                # Log already handled by llm_service; fall back to deterministic parser
+                assignment_text, student_name, due_date = parse_assignment_message(
+                    update.message.text
+                )
+        else:
+            assignment_text, student_name, due_date = parse_assignment_message(
+                update.message.text
+            )
+
         match = find_student_for_teacher(user.id, student_name)
         if match is None:
             raise ValueError("student_not_found")
@@ -696,6 +859,14 @@ def main() -> None:
         write_timeout=30.0,
     )
     init_db()
+    try:
+        llm_service = create_llm_service()
+    except RuntimeError as exc:
+        print(
+            "Warning: GEMINI_API_KEY is not set. "
+            "Assignment parsing will fall back to legacy format."
+        )
+        llm_service = None
 
     application = (
         Application.builder()
@@ -705,6 +876,7 @@ def main() -> None:
         .post_shutdown(on_shutdown)
         .build()
     )
+    application.bot_data["llm_service"] = llm_service
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("create_class", create_class))
     application.add_handler(CommandHandler("join", join_class))
