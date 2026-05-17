@@ -930,7 +930,7 @@ def main() -> None:
     application.add_handler(CommandHandler("submit", submit_command))
     application.add_handler(CommandHandler("feedback", feedback_command))
     application.add_handler(
-        MessageHandler((filters.TEXT | filters.PHOTO | filters.Document) & ~filters.COMMAND, receive_text)
+        MessageHandler((filters.TEXT | filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND, receive_text)
     )
     application.add_handler(CallbackQueryHandler(role_selected, pattern=r"^role:"))
     application.run_polling(drop_pending_updates=True)
