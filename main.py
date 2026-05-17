@@ -518,15 +518,28 @@ async def receive_submission(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if get_user_role(user.id) != "student":
         context.user_data.pop("awaiting_submission", None)
         return
-    if not update.message.text:
-        await update.message.reply_text("Please send your submission as text.")
-        return
+    msg = update.message
 
-    submission_text = update.message.text.strip()
-    if not submission_text:
-        await update.message.reply_text(
-            "Submission cannot be empty. Please try again."
-        )
+    # Accept text, photo, or document submissions
+    submission_text = msg.text.strip() if msg.text else None
+    file_id = None
+    file_name = None
+    file_type = None
+
+    if msg.document:
+        doc = msg.document
+        file_id = doc.file_id
+        file_name = doc.file_name
+        file_type = doc.mime_type or "document"
+    elif msg.photo:
+        # photos is a list of PhotoSize; choose the largest
+        photo = msg.photo[-1]
+        file_id = photo.file_id
+        file_name = None
+        file_type = "photo"
+
+    if not submission_text and not file_id:
+        await update.message.reply_text("Please send your submission as text, photo, or document.")
         return
 
     assignment = get_latest_active_assignment(user.id)
@@ -541,19 +554,44 @@ async def receive_submission(update: Update, context: ContextTypes.DEFAULT_TYPE)
         assignment_id=assignment["id"],
         student_id=user.id,
         submission_text=submission_text,
+        file_id=file_id,
+        file_name=file_name,
+        file_type=file_type,
     )
 
     student_label = f"@{user.username}" if user.username else f"Student {user.id}"
-    await context.bot.send_message(
-        chat_id=assignment["teacher_id"],
-        text=(
-            f"Assignment submitted by {student_label}\n\n"
-            f"Assignment #{assignment['id']} (due {assignment['due_date']}):\n"
-            f"{assignment['assignment_text']}\n\n"
-            f"Submission:\n{submission_text}\n\n"
-            "Status: completed"
-        ),
+    teacher_id = assignment["teacher_id"]
+
+    # Notify teacher: include text and/or forward the file
+    header = (
+        f"Assignment submitted by {student_label}\n\n"
+        f"Assignment #{assignment['id']} (due {assignment['due_date']}):\n"
+        f"{assignment['assignment_text']}\n\n"
     )
+
+    if file_id:
+        caption = header
+        if submission_text:
+            caption += f"Submission note:\n{submission_text}\n\n"
+        caption += "Status: completed"
+        try:
+            if file_type == "photo":
+                await context.bot.send_photo(chat_id=teacher_id, photo=file_id, caption=caption)
+            else:
+                await context.bot.send_document(chat_id=teacher_id, document=file_id, filename=file_name, caption=caption)
+        except TelegramError:
+            # If forwarding fails, fall back to sending a text notification
+            await context.bot.send_message(chat_id=teacher_id, text=caption)
+    else:
+        await context.bot.send_message(
+            chat_id=teacher_id,
+            text=(
+                header
+                + f"Submission:\n{submission_text}\n\n"
+                + "Status: completed"
+            ),
+        )
+
     await update.message.reply_text(
         f"Submission #{submission_id} saved for assignment #{assignment['id']}. "
         "Your teacher has been notified. This assignment is now completed."
@@ -585,10 +623,11 @@ async def feedback_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     context.user_data["awaiting_feedback"] = True
     context.user_data["feedback_submission_id"] = submission["submission_id"]
+    submission_text_display = submission["submission_text"] or "(file attached)"
     await update.message.reply_text(
         f"Giving feedback on submission #{submission['submission_id']} "
         f"for assignment #{submission['assignment_id']}.\n\n"
-        f"Student submission:\n{submission['submission_text']}\n\n"
+        f"Student submission:\n{submission_text_display}\n\n"
         "Please send your feedback."
     )
 
@@ -641,7 +680,7 @@ async def receive_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         text=(
             f"Feedback on assignment #{submission['assignment_id']}\n\n"
             f"Assignment:\n{submission['assignment_text']}\n\n"
-            f"Your submission:\n{submission['submission_text']}\n\n"
+            f"Your submission:\n{submission['submission_text'] or '(file attached)'}\n\n"
             f"Feedback:\n{feedback_text}"
         ),
     )

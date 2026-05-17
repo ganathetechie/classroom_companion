@@ -76,6 +76,28 @@ def init_db() -> None:
             )
             """
         )
+        # Ensure submissions has optional file metadata columns (idempotent)
+        try:
+            existing_sub = conn.execute("PRAGMA table_info('submissions')").fetchall()
+            existing_sub_cols = {row['name'] for row in existing_sub}
+        except Exception:
+            existing_sub_cols = set()
+
+        if 'file_id' not in existing_sub_cols:
+            try:
+                conn.execute("ALTER TABLE submissions ADD COLUMN file_id TEXT")
+            except Exception:
+                pass
+        if 'file_name' not in existing_sub_cols:
+            try:
+                conn.execute("ALTER TABLE submissions ADD COLUMN file_name TEXT")
+            except Exception:
+                pass
+        if 'file_type' not in existing_sub_cols:
+            try:
+                conn.execute("ALTER TABLE submissions ADD COLUMN file_type TEXT")
+            except Exception:
+                pass
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS assignment_progress (
@@ -94,7 +116,10 @@ def init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 assignment_id INTEGER NOT NULL,
                 student_id INTEGER NOT NULL,
-                submission_text TEXT NOT NULL,
+                submission_text TEXT,
+                file_id TEXT,
+                file_name TEXT,
+                file_type TEXT,
                 submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
                 FOREIGN KEY (assignment_id) REFERENCES assignments (id)
             )
@@ -449,17 +474,23 @@ def save_assignment_progress(
 
 
 def save_submission(
-    assignment_id: int, student_id: int, submission_text: str
+    assignment_id: int,
+    student_id: int,
+    submission_text: str | None = None,
+    file_id: str | None = None,
+    file_name: str | None = None,
+    file_type: str | None = None,
 ) -> int:
+    # Accept text submissions, file submissions, or both. Keep backwards-compatible defaults.
     with get_connection() as conn:
         cursor = conn.execute(
             """
             INSERT INTO submissions (
-                assignment_id, student_id, submission_text
+                assignment_id, student_id, submission_text, file_id, file_name, file_type
             )
-            VALUES (?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (assignment_id, student_id, submission_text),
+            (assignment_id, student_id, submission_text, file_id, file_name, file_type),
         )
         conn.execute(
             """
@@ -477,7 +508,7 @@ def get_latest_submission_for_teacher(teacher_id: int) -> sqlite3.Row | None:
         return conn.execute(
             """
             SELECT s.id AS submission_id, s.assignment_id, s.student_id,
-                   s.submission_text, s.submitted_at,
+                   s.submission_text, s.file_id, s.file_name, s.file_type, s.submitted_at,
                    a.assignment_text, a.due_date
             FROM submissions s
             JOIN assignments a ON a.id = s.assignment_id
@@ -496,7 +527,7 @@ def get_submission_for_teacher(
         return conn.execute(
             """
             SELECT s.id AS submission_id, s.assignment_id, s.student_id,
-                   s.submission_text, s.submitted_at,
+                   s.submission_text, s.file_id, s.file_name, s.file_type, s.submitted_at,
                    a.assignment_text, a.due_date
             FROM submissions s
             JOIN assignments a ON a.id = s.assignment_id
