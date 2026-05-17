@@ -553,7 +553,7 @@ async def receive_submission(update: Update, context: ContextTypes.DEFAULT_TYPE)
     submission_id = save_submission(
         assignment_id=assignment["id"],
         student_id=user.id,
-        submission_text=submission_text,
+        submission_text=submission_text or "[Attachment Submission]",
         file_id=file_id,
         file_name=file_name,
         file_type=file_type,
