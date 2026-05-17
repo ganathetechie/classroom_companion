@@ -27,6 +27,7 @@ from db import (
     save_submission,
     save_user,
     teacher_has_classroom,
+    update_assignment_ai,
 )
 from llm_service import create_llm_service, LLMServiceError
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -122,7 +123,7 @@ async def on_startup(application: Application) -> None:
     scheduler.add_job(
         send_assignment_reminders,
         "interval",
-        minutes=1,
+        minutes=5,
         args=[application],
         id="assignment_reminders",
         replace_existing=True,
@@ -222,8 +223,7 @@ async def join_class(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 ASSIGN_FORMAT_HELP = (
-    "Send assignments in natural language, for example:\n\n"
-
+    "Send assignments in natural language\n\n"
     "I can extract the student, task, and due date automatically."
 )
 
@@ -315,25 +315,18 @@ async def assignment_status(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if len(text_preview) > 120:
             text_preview = text_preview[:117] + "..."
 
-        # Try to enrich with latest progress classification
+        # Use stored AI classification (if available) — do not call LLM live here
         classification_snippet = ""
         try:
             progress_row = get_latest_progress_for_assignment(row["id"])
-            llm_service = context.application.bot_data.get("llm_service")
-            if progress_row and llm_service is not None:
-                try:
-                    cls = llm_service.classify_progress(
-                        progress_text=progress_row["progress_text"],
-                        assignment_text=row["assignment_text"],
-                    )
-                    summary = cls.summary
-                    if len(summary) > 80:
-                        summary = summary[:77] + "..."
-                    classification_snippet = f"AI: {cls.category} — {summary} ({cls.confidence})"
-                except LLMServiceError:
-                    classification_snippet = "AI: unavailable"
-                except Exception:
-                    classification_snippet = ""
+            ai_category = row["ai_category"] if "ai_category" in row.keys() else None
+            ai_summary = row["ai_summary"] if "ai_summary" in row.keys() else None
+            ai_confidence = row["ai_confidence"] if "ai_confidence" in row.keys() else None
+            if ai_category and ai_summary:
+                summary = ai_summary
+                if len(summary) > 80:
+                    summary = summary[:77] + "..."
+                classification_snippet = f"AI: {ai_category} — {summary} ({ai_confidence})"
         except Exception:
             classification_snippet = ""
 
@@ -448,6 +441,17 @@ async def receive_progress(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 progress_text=progress_text,
                 assignment_text=assignment["assignment_text"],
             )
+            # Persist classification to DB for later reads
+            try:
+                update_assignment_ai(
+                    assignment_id=assignment["id"],
+                    ai_category=classification.category,
+                    ai_summary=classification.summary,
+                    ai_confidence=classification.confidence,
+                )
+            except Exception:
+                pass
+
             classification_text = (
                 f"\n\nProgress classification: {classification.category}\n"
                 f"Summary: {classification.summary}\n"

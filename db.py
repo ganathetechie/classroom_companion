@@ -26,6 +26,20 @@ def init_db() -> None:
             )
             """
         )
+        # Ensure AI columns exist on older databases (safe, idempotent migration)
+        with get_connection() as conn:
+            try:
+                existing = conn.execute("PRAGMA table_info('assignments')").fetchall()
+                existing_cols = {row['name'] for row in existing}
+            except Exception:
+                existing_cols = set()
+
+            if 'ai_category' not in existing_cols:
+                conn.execute("ALTER TABLE assignments ADD COLUMN ai_category TEXT")
+            if 'ai_summary' not in existing_cols:
+                conn.execute("ALTER TABLE assignments ADD COLUMN ai_summary TEXT")
+            if 'ai_confidence' not in existing_cols:
+                conn.execute("ALTER TABLE assignments ADD COLUMN ai_confidence REAL")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS classrooms (
@@ -55,6 +69,9 @@ def init_db() -> None:
                 assignment_text TEXT NOT NULL,
                 due_date TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'assigned',
+                ai_category TEXT,
+                ai_summary TEXT,
+                ai_confidence REAL,
                 FOREIGN KEY (classroom_id) REFERENCES classrooms (id)
             )
             """
@@ -213,7 +230,8 @@ def get_teacher_assignments(teacher_id: int) -> list[sqlite3.Row]:
         return conn.execute(
             """
             SELECT a.id, c.join_code, u.username, a.student_id,
-                   a.assignment_text, a.status, a.due_date
+                   a.assignment_text, a.status, a.due_date,
+                   a.ai_category, a.ai_summary, a.ai_confidence
             FROM assignments a
             JOIN classrooms c ON c.id = a.classroom_id
             JOIN users u ON u.telegram_id = a.student_id
@@ -519,3 +537,20 @@ def get_latest_progress_for_assignment(assignment_id: int) -> sqlite3.Row | None
             """,
             (assignment_id,),
         ).fetchone()
+
+
+def update_assignment_ai(
+    assignment_id: int,
+    ai_category: str | None,
+    ai_summary: str | None,
+    ai_confidence: float | None,
+) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE assignments
+            SET ai_category = ?, ai_summary = ?, ai_confidence = ?
+            WHERE id = ?
+            """,
+            (ai_category, ai_summary, ai_confidence, assignment_id),
+        )

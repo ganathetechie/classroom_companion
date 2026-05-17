@@ -2,3 +2,5 @@ python-telegram-bot==22.7
 python-dotenv
 APScheduler>=3.10.0
 google-genai>=2.3.0
+streamlit>=1.30.0
+groq
