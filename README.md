@@ -1,295 +1,334 @@
-Classroom Companion : AI-powered Telegram classroom workflow assistant for teachers and students.
+<div align="center">
 
-Overview
-Classroom Companion is an AI-native assignment orchestration system built using Telegram, Python, SQLite, Gemini, and Streamlit.
-The system enables teachers and students to collaborate through conversational workflows directly inside Telegram while providing AI-powered assignment parsing, contextual reminders, progress understanding, and dashboard visibility.
-The product was designed as a lightweight but extensible workflow orchestration MVP focused on:
-•	Natural-language classroom interactions
-•	AI-enhanced assignment management
-•	Teacher/student workflow automation
-•	Progress tracking and contextual insights
-•	Fast execution with reliable deterministic fallback logic
-________________________________________
-Core Features
-Teacher Workflows
-Classroom Management
-•	Create classrooms
-•	Generate invite/join codes
-•	View joined students
-Assignment Orchestration
-•	Assign work using natural language
-•	AI extracts:
-o	student
-o	assignment
-o	due date
-•	Assignment delivery through Telegram
-Progress Visibility
-•	Receive student progress updates
-•	AI interprets progress and sentiment
-•	View assignment status and AI insights
-Feedback Workflow
-•	Review submissions
-•	Send feedback directly to students
-________________________________________
-Student Workflows
-Classroom Joining
-•	Join classrooms using invite codes
-Assignment Tracking
-•	Receive assignments instantly
-•	View assignments and due dates
-•	Update progress conversationally
-•	Submit completed work
-AI Assistance
-•	Receive contextual reminders
-•	Receive feedback updates from teachers
-________________________________________
-AI Features
-AI Assignment Parsing
-Teachers can use natural language instead of strict templates.
-Example:
+# 🎓 Classroom Companion
+
+**AI-powered classroom workflow orchestration — built for teachers and students, delivered through Telegram.**
+
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![Telegram](https://img.shields.io/badge/Telegram-Bot-26A5E4?style=flat-square&logo=telegram&logoColor=white)](https://core.telegram.org/bots)
+[![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io)
+[![SQLite](https://img.shields.io/badge/SQLite-Database-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://sqlite.org)
+[![Railway](https://img.shields.io/badge/Deployed-Railway-0B0D0E?style=flat-square&logo=railway&logoColor=white)](https://railway.app)
+
+</div>
+
+---
+
+## 📌 What is Classroom Companion?
+
+Classroom Companion is a lightweight, AI-native classroom management system that lets teachers and students collaborate directly inside **Telegram** — no custom app required.
+
+It combines conversational workflows with an LLM layer for smart assignment parsing, contextual reminders, progress classification, and a Streamlit dashboard for full visibility.
+
+> Built with a clear philosophy: **AI as enhancement, not dependency.**  
+> Workflows stay reliable even when AI calls fail.
+
+---
+
+## ✨ Feature Overview
+
+### 👩‍🏫 Teacher Workflows
+
+| Feature | Description |
+|---|---|
+| **Classroom Management** | Create classrooms, generate invite codes, view enrolled students |
+| **Natural Language Assignment** | Assign work conversationally — AI extracts student, task & due date |
+| **Progress Visibility** | Receive AI-interpreted student progress updates with sentiment context |
+| **Feedback Loop** | Review submissions and send feedback directly to students via Telegram |
+
+### 🧑‍🎓 Student Workflows
+
+| Feature | Description |
+|---|---|
+| **Join via Invite Code** | Simple one-command classroom onboarding |
+| **Assignment Tracking** | Receive assignments instantly; view tasks and deadlines |
+| **Conversational Progress Updates** | Update progress in plain language — AI classifies it |
+| **Multi-format Submissions** | Submit text, PDFs, documents, or photos |
+
+---
+
+## 🤖 AI Layer
+
+### Assignment Parsing
+
+Teachers write naturally. The AI extracts the structure.
+
+```
 Assign Riya a 500-word essay on climate change due Friday
-The LLM extracts:
-•	Student name
-•	Assignment description
-•	Due date
-________________________________________
-AI Progress Classification
-Student progress updates are interpreted using Gemini.
-Examples:
-Student Update	AI Interpretation
-“Finished introduction and outline”	On Track
-“I’m stuck on the conclusion”	Needs Help
-“Completed final draft”	Complete
-________________________________________
-AI Contextual Reminders
-Reminder messages are generated dynamically using assignment context and due dates.
-Example:
-You're close to finishing your science essay. Try updating your progress if you've already started.
-________________________________________
-AI Dashboard Insights
-Teacher dashboard surfaces:
-•	Assignment status
-•	Progress interpretation
-•	AI-generated insights
-•	Student activity summaries
-________________________________________
-Architecture
-High-Level System Flow
-Telegram Bot
-      ↓
-Workflow Orchestration Layer
-      ↓
-SQLite Database
-      ↑
-Streamlit Dashboard
+```
 
-LLM Layer (Gemini)
-      ↓
-AI Parsing + Classification + Summaries
-________________________________________
-Tech Stack
-Layer	Technology
-Bot Framework	python-telegram-bot
-Backend	Python
-Database	SQLite
-Scheduler	APScheduler
-AI Layer	Gemini API
-Dashboard	Streamlit
-Environment Management	python-dotenv
-________________________________________
-Project Structure
+| Extracted Field | Value |
+|---|---|
+| Student | Riya |
+| Assignment | 500-word essay on climate change |
+| Due Date | Friday |
+
+---
+
+### Progress Classification
+
+Student messages are interpreted contextually.
+
+| Student Update | AI Classification |
+|---|---|
+| "Finished introduction and outline" | ✅ On Track |
+| "I'm stuck on the conclusion" | 🆘 Needs Help |
+| "Completed final draft" | 🎉 Complete |
+
+---
+
+### Contextual Reminders
+
+Reminders are dynamically generated using assignment context, due dates, and current progress state — not generic templates.
+
+```
+You're close to finishing your science essay.
+Try updating your progress if you've already started.
+```
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────┐
+│    Telegram Bot      │
+└────────┬────────────┘
+         │
+┌────────▼────────────┐
+│  Workflow           │
+│  Orchestration      │
+│  Layer              │
+└────────┬────────────┘
+         │
+┌────────▼────────────┐     ┌──────────────────────┐
+│   SQLite Database   │◄────│  Streamlit Dashboard  │
+└─────────────────────┘     └──────────────────────┘
+
+┌─────────────────────────────────────┐
+│         LLM Layer (Groq / Gemini)   │
+│  Parsing · Classification · Summary │
+└─────────────────────────────────────┘
+```
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Bot Framework | `python-telegram-bot` |
+| Backend | Python |
+| Database | SQLite |
+| Scheduler | APScheduler |
+| AI Layer | Groq (Llama 3.1) + Gemini 2.0 |
+| Dashboard | Streamlit |
+| Environment | python-dotenv |
+| Deployment | Railway + Streamlit Cloud |
+
+---
+
+## 📁 Project Structure
+
+```
 classroom_companion/
 │
-├── main.py
-├── db.py
-├── llm_service.py
-├── dashboard.py
-├── classroom_companion.db
+├── main.py                   # Bot entrypoint & command handlers
+├── db.py                     # Database models & queries
+├── llm_service.py            # LLM abstraction layer
+├── dashboard.py              # Streamlit dashboard
+├── classroom_companion.db    # SQLite database
 ├── requirements.txt
-├── .env
+├── .env.example
 └── README.md
-________________________________________
-LLM Architecture
-The project uses a provider abstraction layer to avoid vendor lock-in.
-Current Provider
-•	Gemini
-Extensible Design
-The LLM layer is abstracted through:
-BaseLLMService
-This allows future support for:
-•	OpenAI
-•	Groq
-•	Claude
-•	Local models
-without changing orchestration workflows.
-________________________________________
-Reliability Design
-A major design goal was maintaining workflow reliability even during AI failures.
-Deterministic Fallbacks
-If AI calls fail due to:
-•	quota limits
-•	provider outages
-•	parsing failures
-the system falls back to:
-•	deterministic parsing
-•	static reminders
-•	existing workflow logic
-This ensures:
-•	workflows never crash
-•	Telegram orchestration remains functional
-•	AI acts as enhancement, not dependency
-________________________________________
-Dashboard Features
-Teacher Dashboard
-•	View assignments
-•	View assignment status
-•	AI progress insights
-•	Filter by student
-•	View deadlines
-Student Dashboard
-•	View assignments
-•	View due dates
-•	View feedback
-•	Filter by teacher
-________________________________________
-Setup Instructions
-1. Clone Repository
+```
+
+---
+
+## ⚙️ Setup & Installation
+
+### 1. Clone the Repository
+
+```bash
 git clone <repo_url>
 cd classroom_companion
-________________________________________
-2. Create Virtual Environment
+```
+
+### 2. Create a Virtual Environment
+
+**Windows**
+```bash
 python -m venv .venv
-Activate:
-Windows
 .venv\Scripts\activate
-Mac/Linux
+```
+
+**Mac / Linux**
+```bash
+python -m venv .venv
 source .venv/bin/activate
-________________________________________
-3. Install Dependencies
+```
+
+### 3. Install Dependencies
+
+```bash
 pip install -r requirements.txt
-________________________________________
-4. Configure Environment Variables
-Create .env
+```
+
+### 4. Configure Environment Variables
+
+Create a `.env` file in the project root:
+
+```env
 BOT_TOKEN=your_telegram_bot_token
+
+LLM_PROVIDER=groq
+
+GROQ_API_KEY=your_groq_api_key
+GROQ_MODEL=llama-3.1-8b-instant
+
 GEMINI_API_KEY=your_gemini_api_key
-LLM_PROVIDER=gemini
 GEMINI_MODEL=gemini-2.0-flash
-________________________________________
-Running the Bot
+```
+
+---
+
+## 🚀 Running the Project
+
+**Start the Telegram Bot**
+```bash
 python main.py
-________________________________________
-Running the Dashboard
+```
+
+**Launch the Dashboard**
+```bash
 streamlit run dashboard.py
-________________________________________
-Telegram Commands
-Teacher Commands
-Command	Description
-/start	Start bot and select role
-/create_class	Create classroom and invite code
-/students	View students
-/assign	Create assignment
-/status	View assignment status
-/feedback	Send feedback
-________________________________________
-Student Commands
-Command	Description
-/start	Start bot and select role
-/join	Join classroom
-/progress	Send progress update
-/submit	Submit assignment
-________________________________________
-Example End-to-End Workflow
-Teacher
-Assign Riya a climate change essay due Friday
-AI Layer
-•	Extracts student
-•	Extracts task
-•	Extracts due date
-Student
-Receives assignment instantly.
-________________________________________
-Student Progress Update
-Finished introduction but stuck on conclusion
-AI Layer
-Classifies:
-•	Needs Help
-•	In Progress
-Teacher receives contextual update.
-________________________________________
-Reminder Workflow
-AI generates contextual reminder messages based on:
-•	assignment status
-•	due date
-•	progress state
-________________________________________
-Tradeoffs & Design Decisions
-Why Telegram?
-Telegram enables:
-•	conversational workflows
-•	multi-user orchestration
-•	rapid prototyping
-•	lightweight collaboration
-without requiring custom frontend development.
-________________________________________
-Why SQLite?
-SQLite was chosen for:
-•	simplicity
-•	portability
-•	rapid iteration
-•	low operational overhead
-for MVP development.
-________________________________________
-Why Streamlit?
-Streamlit allowed rapid creation of visibility and analytics layers without building a dedicated frontend.
-________________________________________
-Why AI Augmentation Instead of AI-First Control?
-The product intentionally uses:
-AI as enhancement
-NOT AI as workflow dependency
-This improves:
-•	reliability
-•	predictability
-•	graceful degradation
-•	workflow stability
-________________________________________
-Future Improvements
-Potential future enhancements:
-•	Voice-note progress updates
-•	Multi-classroom support
-•	Rich analytics
-•	Assignment prioritization
-•	Parent notifications
-•	Mobile dashboard
-•	Vector memory for long-term student learning insights
-•	Multi-provider LLM routing
-________________________________________
-Demo Flow
-Recommended demo sequence:
-1.	Teacher creates classroom
-2.	Student joins classroom
-3.	Teacher assigns naturally using AI
-4.	Student receives assignment
-5.	Student updates progress conversationally
-6.	AI interprets progress
-7.	Teacher receives contextual insight
-8.	AI reminder triggered
-9.	Student submits work
-10.	Teacher provides feedback
-11.	Dashboard visualizes assignment lifecycle
-________________________________________
-Key Product Themes
-This project focuses on:
-•	AI-native workflows
-•	Conversational orchestration
-•	Human-in-the-loop automation
-•	Reliable AI augmentation
-•	Fast execution and extensibility
-________________________________________
-Author Notes
-The product was intentionally designed as a pragmatic AI-native MVP focused on balancing:
-•	speed of execution
-•	workflow reliability
-•	AI augmentation
-•	extensibility
-•	user experience
-rather than overengineering infrastructure or agentic complexity.
+```
+
+---
+
+## 💬 Telegram Command Reference
+
+### Teacher Commands
+
+| Command | Description |
+|---|---|
+| `/start` | Start bot and select role |
+| `/create_class` | Create a classroom and generate an invite code |
+| `/students` | View enrolled students |
+| `/assign` | Create an assignment (natural language supported) |
+| `/status` | View assignment status |
+| `/feedback` | Send feedback to a student |
+
+### Student Commands
+
+| Command | Description |
+|---|---|
+| `/start` | Start bot and select role |
+| `/join` | Join a classroom via invite code |
+| `/progress` | Send a progress update |
+| `/submit` | Submit completed assignment |
+
+---
+
+## 🔄 End-to-End Demo Flow
+
+```
+1.  Teacher creates classroom        →  Invite code generated
+2.  Student joins with code          →  Enrolled instantly
+3.  Teacher assigns (natural lang.)  →  AI parses task, student, due date
+4.  Student receives assignment      →  Delivered via Telegram
+5.  Student updates progress         →  AI classifies status
+6.  Teacher receives insight         →  Contextual summary surfaced
+7.  AI reminder triggered            →  Dynamic, context-aware nudge
+8.  Student submits work / files     →  Forwarded to teacher
+9.  Teacher sends feedback           →  Delivered to student
+10. Dashboard visualizes lifecycle   →  Full assignment visibility
+```
+
+---
+
+## 🧠 LLM Architecture
+
+The LLM layer uses a provider abstraction to avoid vendor lock-in.
+
+```python
+BaseLLMService
+├── GroqService
+└── GeminiService
+```
+
+This makes it straightforward to add:
+- OpenAI / Claude
+- Local models (Ollama, etc.)
+- Multi-provider routing with fallback chains
+
+---
+
+## 🛡️ Reliability Design
+
+A core design goal was **workflow stability under AI failures**.
+
+If any AI call fails due to quota limits, provider outages, or parsing errors — the system falls back to:
+
+- ✅ Deterministic assignment parsing
+- ✅ Static reminder templates
+- ✅ Existing workflow logic
+
+**Telegram orchestration always stays functional. AI enhances; it never controls.**
+
+---
+
+## 📊 Dashboard Features
+
+**Teacher Dashboard**
+- View all assignments and statuses
+- AI-generated progress insights
+- Filter by student or deadline
+
+**Student Dashboard**
+- View assigned tasks and due dates
+- View teacher feedback
+- Filter by teacher
+
+---
+
+## 🔭 Future Improvements
+
+- [ ] Voice-note transcription for submissions
+- [ ] Multi-classroom support per teacher
+- [ ] Rich analytics and completion trends
+- [ ] Assignment prioritization engine
+- [ ] Parent notification layer
+- [ ] Mobile-optimized dashboard
+- [ ] Vector memory for long-term student insights
+- [ ] Multi-provider LLM routing
+- [ ] Shared production database (PostgreSQL migration)
+
+---
+
+## ⚠️ Known Limitations
+
+- SQLite is used for MVP-phase persistence; not suitable for high-concurrency production use
+- Bot and dashboard run in separate containers — shared state relies on the database
+- Dashboard is a visibility layer; it does not interact with the bot directly
+
+---
+
+## 🎯 Design Philosophy
+
+> Build fast. Stay reliable. Let AI augment, not dictate.
+
+This project deliberately prioritises:
+
+- **Speed of execution** over infrastructure perfection
+- **Workflow reliability** over agentic complexity
+- **AI as a layer** that enhances deterministic orchestration
+- **Extensibility** so the architecture grows without rewrites
+
+---
+
+<div align="center">
+
+Made with 🤖 + ☕ · Deployed on Railway & Streamlit Cloud
+
+</div>
